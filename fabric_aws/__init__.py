@@ -169,5 +169,38 @@ def cloudformation_autoscaling_group(*args, **kwargs):
 
     return _list_annotating_decorator('hosts', cloudformation_autoscaling_group_generator(*args, **kwargs))
 
+def ec2_tag_generator(region, tags, hostname_attribute='public_dns_name'):
+    """
+    Hosts generator for running a task on all instances matching a tag
+    Please decorate your functions with `ec2_tag`
 
-__all__ = ['cloudformation_autoscaling_group', 'autoscaling_group']
+    :param region: AWS region
+    :type region: str
+    :param tags: EC2 Tags to match, key-value dict. E.g. {'Name': 'my-instance'}
+    :type tags: dict[str, str]
+    :param hostname_attribute: `boto.ec2.instance.Instance` attribute to use as hostname for fabric connection
+    :type hostname_attribute: str
+    """
+
+    ec2 = boto.ec2.connect_to_region(region)
+
+    reservations = ec2.get_all_instances(filters={'tag:'+tagKey: tagValue for tagKey, tagValue in tags.iteritems()})
+    for instance in reduce(lambda instances, r: instances + r.instances, reservations, []):
+        yield getattr(instance, hostname_attribute)
+
+@wraps(ec2_tag_generator)
+def ec2_tag(*args, **kwargs):
+    """
+    Decorator for running a task on all instances inside an autoscaling group that is a part of a CFN stack
+
+    :param region: AWS region
+    :type region: str
+    :param tags: EC2 Tags to match, key-value dict. E.g. {'Name': 'my-instance'}
+    :type tags: dict[str, str]
+    :param hostname_attribute: `boto.ec2.instance.Instance` attribute to use as hostname for fabric connection
+    :type hostname_attribute: str
+    """
+
+    return _list_annotating_decorator('hosts', ec2_tag_generator(*args, **kwargs))
+
+__all__ = ['cloudformation_autoscaling_group', 'autoscaling_group', 'ec2_tag']
